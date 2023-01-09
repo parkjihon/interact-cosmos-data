@@ -5,19 +5,21 @@ import (
 	"errors"
 	"fmt"
 
-	"google.golang.org/grpc"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"google.golang.org/grpc"
+
+	"interact-cosmos-data/types"
 )
 
-const (
-	GRPC_ADDRESS      = "127.0.0.1:11290" // localnet agia
-	VALIDATOR_ADDRESS = "cosmos1jputs32a6c5m6f572tp9cpk0n7pvnk4rfpajea"
-)
-
-func QueryState() (error, error) {
+func QueryState04() (error, error) {
+	config := types.GetConfig()
+	var (
+		GRPC_ADDRESS      = config.Grpc.GrpcAddress
+		VALIDATOR_ADDRESS = config.Grpc.ValidatorAddress
+	)
 	fmt.Println("QueryState started...")
+	// get config & address
 	myAddress, err := sdk.AccAddressFromBech32(VALIDATOR_ADDRESS)
 	if err != nil {
 		return err, errors.New("sdk.AccAddressFromBech32")
@@ -46,6 +48,25 @@ func QueryState() (error, error) {
 	if err != nil {
 		return err, errors.New("NewQueryClient")
 	}
-	fmt.Println(bankRes.GetBalance())
+
+	// 한 계정의 모든 coin 추출
+	bankAllBalances, err := bankClient.AllBalances(
+		context.Background(),
+		&banktypes.QueryAllBalancesRequest{
+			Address: myAddress.String(),
+		},
+	)
+
+	bankDenomMetadata, err := bankClient.DenomMetadata(
+		context.Background(),
+		&banktypes.QueryDenomMetadataRequest{
+			Denom: "uatom",
+		},
+	)
+
+	fmt.Println("GetBalance   : ", bankRes.GetBalance())
+	fmt.Println("AllBalances  : ", bankAllBalances.GetBalances())
+	fmt.Println("DenomMetadata: ", bankDenomMetadata.GetMetadata())
+
 	return nil, nil
 }

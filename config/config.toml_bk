@@ -1,0 +1,13 @@
+title = ""
+
+[Grpc]
+grpc_address      = "127.0.0.1:11290"
+validator_address = "cosmos1jputs32a6c5m6f572tp9cpk0n7pvnk4rfpajea"
+
+[Eth]
+etherscan_mainnet_endpoint = "https://api.etherscan.io"
+etherscan_key              = "1AVG9N63M1RSXTGQUN8S9MZ67FRFQ2CK7M"
+
+
+
+

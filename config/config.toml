@@ -1,0 +1,13 @@
+title = ""
+
+[Grpc]
+grpc_address      = "testnet-endpoint.crescent.network:9090"
+validator_address = "cosmos1zgwx3cwyyx8np35hlzngmkfdalnrjxj2450sul"
+
+[Eth]
+etherscan_mainnet_endpoint = "https://api.etherscan.io"
+etherscan_key              = "1AVG9N63M1RSXTGQUN8S9MZ67FRFQ2CK7M"
+
+
+
+

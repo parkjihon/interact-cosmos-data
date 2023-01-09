@@ -5,15 +5,21 @@ import (
 	"errors"
 	"fmt"
 
-	"google.golang.org/grpc"
-
-	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"google.golang.org/grpc"
+
+	"interact-cosmos-data/types"
 )
 
 func QueryState02() (error, error) {
+	config := types.GetConfig()
+	var (
+		GRPC_ADDRESS      = config.Grpc.GrpcAddress
+		VALIDATOR_ADDRESS = config.Grpc.ValidatorAddress
+	)
 	fmt.Println("QueryState started...")
+	// get config & address
 	myAddress, err := sdk.AccAddressFromBech32(VALIDATOR_ADDRESS)
 	if err != nil {
 		return err, errors.New("sdk.AccAddressFromBech32")
@@ -23,7 +29,7 @@ func QueryState02() (error, error) {
 	grpcConn, err := grpc.Dial(
 		GRPC_ADDRESS, // your gRPC server address
 		grpc.WithInsecure(),
-		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(nil).GRPCCodec())),
+		//grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(nil).GRPCCodec())),
 	)
 	if err != nil {
 		return err, errors.New("grpc.Dial")
