@@ -1,0 +1,15 @@
+package grpc
+
+import (
+	"github.com/cosmos/cosmos-sdk/simapp"
+)
+
+func sendTx() error {
+	// Choose your codec: Amino or Protobuf. Here, we use Protobuf, given by the following function.
+	app := simapp.NewSimApp()
+
+	// Create a new TxBuilder.
+	txBuilder := app.TxConfig().NewTxBuilder()
+
+	// --snip--
+}

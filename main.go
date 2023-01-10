@@ -1,8 +1,6 @@
 package main
 
-import (
-	grpc "interact-cosmos-data/grpc"
-)
+import "interact-cosmos-data/grpc"
 
 func main() {
 	//err, err2 := grpc.QueryState()

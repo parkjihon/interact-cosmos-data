@@ -1,0 +1,181 @@
+package grpc
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	txtype "github.com/cosmos/cosmos-sdk/types/tx"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+
+	"github.com/cosmos/cosmos-sdk/client/tx"
+	"github.com/cosmos/cosmos-sdk/simapp"
+	"github.com/cosmos/cosmos-sdk/testutil/testdata"
+	"github.com/cosmos/cosmos-sdk/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	liquiditytypes "github.com/crescent-network/crescent/v3/x/liquidity/types"
+	"google.golang.org/grpc"
+
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/cosmos/cosmos-sdk/types/tx/signing"
+	xauthsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
+)
+
+func QueryState07() error {
+	//myAddress, err := sdk.AccAddressFromBech32("cosmos1zgwx3cwyyx8np35hlzngmkfdalnrjxj2450sul")
+	//myAddress, err := sdk.AccAddressFromBech32("cre1zgwx3cwyyx8np35hlzngmkfdalnrjxj23uu4fj")
+	// if err != nil {
+	// 	return err
+	// }
+
+	// Create a connection to the gRPC server.
+	grpcConn, err := grpc.Dial(
+		//"testnet-endpoint.crescent.network:9090", // your gRPC server address.
+		"localhost:9090",
+		grpc.WithInsecure(), // The SDK doesn't support any transport security mechanism.
+	)
+	if err != nil {
+		fmt.Println("하 시발", err)
+	}
+	defer grpcConn.Close()
+
+	// create msg for MMOrder
+	msg := liquiditytypes.MsgMMOrder{
+		Orderer: addr,
+		PairId:  4,
+		//MaxSellPrice: types.NewDec(0.00535),
+		MaxSellPrice:  types.NewDec(5),
+		MinSellPrice:  types.NewDec(4),
+		SellAmount:    types.NewInt(1000000000), //1,000
+		MaxBuyPrice:   types.NewDec(3),
+		MinBuyPrice:   types.NewDec(2),
+		BuyAmount:     types.NewInt(1000000000),              //1,000
+		OrderLifespan: time.Duration(time.Duration.Hours(1)), // 1시간
+	}
+	fmt.Println("MMOder 메시지 말기")
+	fmt.Println(msg)
+
+	sendTx()
+
+	return nil
+}
+
+func sendTx() error {
+	// Choose your codec: Amino or Protobuf. Here, we use Protobuf, given by the
+	// following function.
+	encCfg := simapp.MakeTestEncodingConfig()
+
+	// Create a new TxBuilder.
+	txBuilder := encCfg.TxConfig.NewTxBuilder()
+
+	priv1, _, addr1 := testdata.KeyTestPubAddr()
+	priv2, _, addr2 := testdata.KeyTestPubAddr()
+	_, _, addr3 := testdata.KeyTestPubAddr()
+
+	// --snip--
+	// Define two x/bank MsgSend messages:
+	// - from addr1 to addr3,
+	// - from addr2 to addr3.
+	// This means that the transactions needs two signers: addr1 and addr2.
+	msg1 := banktypes.NewMsgSend(addr1, addr3, types.NewCoins(types.NewInt64Coin("atom", 12)))
+	msg2 := banktypes.NewMsgSend(addr2, addr3, types.NewCoins(types.NewInt64Coin("atom", 34)))
+
+	err := txBuilder.SetMsgs(msg1, msg2)
+	if err != nil {
+		return err
+	}
+
+	//txBuilder.SetGasLimit(...)
+	//txBuilder.SetFeeAmount(...)
+	//txBuilder.SetMemo(...)
+	//txBuilder.SetTimeoutHeight(...)
+
+	privs := []cryptotypes.PrivKey{priv1, priv2}
+	accNums := []uint64{0, 0} // The accounts' account numbers
+	accSeqs := []uint64{0, 0} // The accounts' sequence numbers
+
+	// First round: we gather all the signer infos. We use the "set empty
+	// signature" hack to do that.
+	var sigsV2 []signing.SignatureV2
+	for i, priv := range privs {
+		sigV2 := signing.SignatureV2{
+			PubKey: priv.PubKey(),
+			Data: &signing.SingleSignatureData{
+				SignMode:  encCfg.TxConfig.SignModeHandler().DefaultMode(),
+				Signature: nil,
+			},
+			Sequence: accSeqs[i],
+		}
+
+		sigsV2 = append(sigsV2, sigV2)
+	}
+	err = txBuilder.SetSignatures(sigsV2...)
+	if err != nil {
+		return err
+	}
+
+	// Second round: all signer infos are set, so each signer can sign.
+	sigsV2 = []signing.SignatureV2{}
+	for i, priv := range privs {
+		signerData := xauthsigning.SignerData{
+			// ChainID:       chainID,
+			ChainID:       "mooncat-2-external",
+			AccountNumber: accNums[i],
+			Sequence:      accSeqs[i],
+		}
+		sigV2, err := tx.SignWithPrivKey(
+			encCfg.TxConfig.SignModeHandler().DefaultMode(), signerData,
+			txBuilder, priv, encCfg.TxConfig, accSeqs[i])
+		if err != nil {
+			return err
+		}
+
+		sigsV2 = append(sigsV2, sigV2)
+	}
+	err = txBuilder.SetSignatures(sigsV2...)
+	if err != nil {
+		return err
+	}
+
+	// Generated Protobuf-encoded bytes.
+	txBytes, err := encCfg.TxConfig.TxEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return err
+	}
+
+	// Generate a JSON string.
+	txJSONBytes, err := encCfg.TxConfig.TxJSONEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return err
+	}
+	//txJSON := string(txJSONBytes)
+	_ = string(txJSONBytes)
+
+	// Create a connection to the gRPC server.
+	grpcConn, err := grpc.Dial(
+		"127.0.0.1:9090",    // Or your gRPC server address.
+		grpc.WithInsecure(), // The Cosmos SDK doesn't support any transport security mechanism.
+	)
+	defer grpcConn.Close()
+
+	// Broadcast the tx via gRPC. We create a new client for the Protobuf Tx
+	// service.
+	txClient := txtype.NewServiceClient(grpcConn)
+	// We then call the BroadcastTx method on this client.
+	grpcRes, err := txClient.BroadcastTx(
+		//ctx,
+		context.Background(),
+		&txtype.BroadcastTxRequest{
+			Mode:    txtype.BroadcastMode_BROADCAST_MODE_SYNC,
+			TxBytes: txBytes, // Proto-binary of the signed transaction, see previous step.
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(grpcRes.TxResponse.Code) // Should be `0` if the tx is successful
+	fmt.Println(grpcRes.TxResponse)      // Should be `0` if the tx is successful
+
+	return nil
+}

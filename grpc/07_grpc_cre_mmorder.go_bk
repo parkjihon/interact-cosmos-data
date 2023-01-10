@@ -1,0 +1,235 @@
+package grpc
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/b-harvest/modules-test-tool/wallet"
+	txtype "github.com/cosmos/cosmos-sdk/types/tx"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+
+	"github.com/cosmos/cosmos-sdk/client/tx"
+	"github.com/cosmos/cosmos-sdk/simapp"
+	"github.com/cosmos/cosmos-sdk/types"
+	liquiditytypes "github.com/crescent-network/crescent/v3/x/liquidity/types"
+	"google.golang.org/grpc"
+
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/cosmos/cosmos-sdk/types/tx/signing"
+	xauthsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
+)
+
+func QueryState07() error {
+	//myAddress, err := sdk.AccAddressFromBech32("cosmos1zgwx3cwyyx8np35hlzngmkfdalnrjxj2450sul")
+	//myAddress, err := sdk.AccAddressFromBech32("cre1zgwx3cwyyx8np35hlzngmkfdalnrjxj23uu4fj")
+	// if err != nil {
+	// 	return err
+	// }
+
+	// Create a connection to the gRPC server.
+	grpcConn, err := grpc.Dial(
+		//"testnet-endpoint.crescent.network:9090", // your gRPC server address.
+		"localhost:9090",
+		grpc.WithInsecure(), // The SDK doesn't support any transport security mechanism.
+	)
+	if err != nil {
+		fmt.Println("하 시발", err)
+	}
+	defer grpcConn.Close()
+
+	// create msg for MMOrder
+	// 0.0053800 이 기준
+	tmpMaxSellPrice, err := types.NewDecFromStr("0.0054100")
+	tmpMinSellPrice, err := types.NewDecFromStr("0.0053801")
+	tmpMaxBuyPrice, err := types.NewDecFromStr("0.0053800")
+	tmpMinBuyPrice, err := types.NewDecFromStr("0.0053501")
+
+	msg := liquiditytypes.MsgMMOrder{
+		Orderer: addr,
+		PairId:  4,
+		//MaxSellPrice: types.NewDec(0.00537),
+		MaxSellPrice:  tmpMaxSellPrice,
+		MinSellPrice:  tmpMinSellPrice,
+		SellAmount:    types.NewInt(4000000000), //500
+		MaxBuyPrice:   tmpMaxBuyPrice,
+		MinBuyPrice:   tmpMinBuyPrice,
+		BuyAmount:     types.NewInt(4000000000), //500
+		OrderLifespan: time.Hour,                // 1시간
+	}
+	fmt.Println("MMOder 메시지 말기")
+	fmt.Println(msg)
+
+	err = sendTx(&msg)
+	if err != nil {
+		fmt.Println("sendTx Error", err)
+	}
+
+	return nil
+}
+
+func sendTx(mmMsg *liquiditytypes.MsgMMOrder) error {
+	// Create a connection to the gRPC server.
+	grpcConn, err := grpc.Dial(
+		"127.0.0.1:9090",    // Or your gRPC server address.
+		grpc.WithInsecure(), // The Cosmos SDK doesn't support any transport security mechanism.
+	)
+	defer grpcConn.Close()
+	fmt.Println("디버깅 8")
+
+	// Choose your codec: Amino or Protobuf. Here, we use Protobuf, given by the
+	// following function.
+	encCfg := simapp.MakeTestEncodingConfig()
+	fmt.Println("디버깅 1")
+
+	// Create a new TxBuilder.
+	txBuilder := encCfg.TxConfig.NewTxBuilder()
+	fmt.Println("디버깅 2")
+
+	myMne := "assist field six actual frown fury diet bulb address hello van swamp sustain dolphin ordinary short teach mammal digital garage legal labor ride pioneer"
+	//accAddr, privKey, err := wallet.RecoverAccountFromMnemonic(myMne, "")
+	myAddr, privKey, err := wallet.RecoverAccountFromMnemonic(myMne, "")
+	if err != nil {
+		return err
+	}
+	fmt.Println("내 계정: ", myAddr)
+	fmt.Println("디버깅 4")
+
+	//priv1, _, addr1 := testdata.KeyTestPubAddr()
+	//priv2, _, addr2 := testdata.KeyTestPubAddr()
+	//_, _, addr3 := testdata.KeyTestPubAddr()
+
+	// Define two x/bank MsgSend messages:
+	// - from addr1 to addr3,
+	// - from addr2 to addr3.
+	// This means that the transactions needs two signers: addr1 and addr2.
+	//msg1 := banktypes.NewMsgSend(addr1, addr3, types.NewCoins(types.NewInt64Coin("atom", 12)))
+	//msg2 := banktypes.NewMsgSend(addr2, addr3, types.NewCoins(types.NewInt64Coin("atom", 34)))
+	//msg1 := banktypes.NewMsgSend(addr1, addr3, types.NewCoins(types.NewInt64Coin("ucre", 12)))
+	//msg2 := banktypes.NewMsgSend(addr2, addr3, types.NewCoins(types.NewInt64Coin("ucre", 34)))
+
+	//err = txBuilder.SetMsgs(msg1, msg2, mmMsg)
+	err = txBuilder.SetMsgs(mmMsg)
+	if err != nil {
+		return err
+	}
+	fmt.Println("디버깅 3")
+
+	txBuilder.SetGasLimit(uint64(1000000))
+	//txBuilder.SetFeeAmount(...)
+	//txBuilder.SetMemo(...)
+	//txBuilder.SetTimeoutHeight(...)
+
+	//privs := []cryptotypes.PrivKey{priv1, priv2, privKey}
+	priv := cryptotypes.PrivKey(privKey)
+
+	//types.BaseAccount
+	//accSeq := account.GetSequence()
+	//accNum := account.GetAccountNumber()
+	req := authtypes.QueryAccountRequest{
+		Address: addr,
+	}
+	authClient := authtypes.NewQueryClient(grpcConn)
+	resp, err := authClient.Account(
+		context.Background(),
+		&req,
+	)
+	if err != nil {
+		return err
+	}
+	//accNum := account.
+
+	var acc authtypes.BaseAccount
+	err = acc.Unmarshal(resp.GetAccount().Value)
+	if err != nil {
+		return err
+	}
+	accNum := acc.GetAccountNumber()
+	accSeq := acc.GetSequence()
+	fmt.Println("accNum & accSeq: ", accNum, accSeq)
+
+	//accNum := uint64(217035) // The accounts' account numbers
+	//accSeq := uint64(40)     // The accounts' sequence numbers
+	fmt.Println("디버깅 5")
+
+	// First round: we gather all the signer infos. We use the "set empty
+	// signature" hack to do that.
+	//var sigsV2 signing.SignatureV2
+
+	sigV2 := signing.SignatureV2{
+		PubKey: priv.PubKey(),
+		Data: &signing.SingleSignatureData{
+			SignMode:  encCfg.TxConfig.SignModeHandler().DefaultMode(),
+			Signature: nil,
+		},
+		Sequence: accSeq,
+	}
+
+	err = txBuilder.SetSignatures(sigV2)
+	if err != nil {
+		return err
+	}
+	fmt.Println("디버깅 6")
+
+	// Second round: all signer infos are set, so each signer can sign.
+	sigV2 = signing.SignatureV2{}
+	signerData := xauthsigning.SignerData{
+		// ChainID:       chainID,
+		ChainID:       "mooncat-2-external",
+		AccountNumber: accNum,
+		Sequence:      accSeq,
+	}
+	sigV2, err = tx.SignWithPrivKey(
+		encCfg.TxConfig.SignModeHandler().DefaultMode(), signerData,
+		txBuilder, priv, encCfg.TxConfig, accSeq)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("디버깅 7")
+
+	err = txBuilder.SetSignatures(sigV2)
+	if err != nil {
+		return err
+	}
+	fmt.Println("디버깅 7-1")
+
+	// Generated Protobuf-encoded bytes.
+	txBytes, err := encCfg.TxConfig.TxEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return err
+	}
+	fmt.Println("디버깅 7-2")
+
+	// Generate a JSON string.
+	// txJSONBytes, err := encCfg.TxConfig.TxJSONEncoder()(txBuilder.GetTx())
+	// if err != nil {
+	// 	fmt.Println("Generate a JSON string error: ", err)
+	// 	return err
+	// }
+	//txJSON := string(txJSONBytes)
+	//_ = string(txJSONBytes)
+	fmt.Println("디버깅 7-3")
+
+	// Broadcast the tx via gRPC. We create a new client for the Protobuf Tx
+	// service.
+	txClient := txtype.NewServiceClient(grpcConn)
+	// We then call the BroadcastTx method on this client.
+	grpcRes, err := txClient.BroadcastTx(
+		//ctx,
+		context.Background(),
+		&txtype.BroadcastTxRequest{
+			Mode:    txtype.BroadcastMode_BROADCAST_MODE_SYNC,
+			TxBytes: txBytes, // Proto-binary of the signed transaction, see previous step.
+		},
+	)
+	if err != nil {
+		return err
+	}
+	fmt.Println("디버깅 9")
+
+	fmt.Println(grpcRes.TxResponse.Code) // Should be `0` if the tx is successful
+	fmt.Println(grpcRes.TxResponse)      // Should be `0` if the tx is successful
+
+	return nil
+}
